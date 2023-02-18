@@ -77,7 +77,9 @@ for desktop in $desktops; do
   echo '# Restart the x11vnc server with the updated -geometry option' >> "$desktop/update_resolution.sh"
   echo 'x11vnc -display :0 -rfbport 5900 -nopw -bg -xkb -quiet -forever -auth guess -geometry $resolution' >> "$desktop/update_resolution.sh"
   chmod u+x "$desktop/update_resolution.sh"
+  mv $desktop/update_resolution.sh /usr/local/bin/update_resolution
 done
+
 
 # Add the x11vnc command to crontab
 echo "@reboot x11vnc -display :0 -rfbport 5900 -nopw -bg -xkb -quiet -forever -auth guess -geometry 1280x720" >> /etc/crontab
