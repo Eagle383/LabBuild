@@ -82,10 +82,10 @@ done
 
 
 # Add the x11vnc command to crontab
-echo "@reboot x11vnc -display :0 -rfbport 5900 -nopw -bg -xkb -quiet -forever -auth guess -geometry 1280x720" >> /etc/crontab
+(crontab -l 2>/dev/null; echo "@reboot x11vnc -display :0 -rfbport 5900 -nopw -bg -xkb -quiet -forever -auth guess") | crontab -
 
 # Add the novnc command to crontab
-echo "@reboot novnc --listen 6061 --vnc localhost:5900 /snap/bin/novnc" >> /etc/crontab
+(crontab -l 2>/dev/null; echo "@reboot novnc --listen 6061 --vnc localhost:5900 /snap/bin/novnc") | crontab -
 
 # Set zsh as the default shell for new users
 echo "Set zsh as the default shell for new users"
@@ -100,8 +100,19 @@ done
 
 echo "Done"
 
+# Generate a private key
+#openssl genrsa -out key.pem 2048
 
-x11vnc -display :0 -rfbport 5900 -nopw -bg -xkb -quiet -forever -auth guess -geometry 1280x720
+# Generate a certificate signing request (CSR)
+#openssl req -new -key key.pem -out csr.pem
+
+# Generate the self-signed SSL certificate
+#openssl x509 -req -days 365 -in csr.pem -signkey key.pem -out self.pem
+
+# Display the details of the self-signed SSL certificate
+#openssl x509 -in self.pem -text
+
+x11vnc -display :0 -rfbport 5900 -nopw -bg -xkb -quiet -forever -auth guess
 novnc --listen 6061 --vnc localhost:5900 /snap/bin/novnc
 
 
