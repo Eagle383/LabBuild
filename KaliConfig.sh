@@ -37,7 +37,7 @@ sudo mkhomedir_helper "LogixBomb"
 # Add user to root group
 sudo usermod -aG sudo LogixBomb
 
-sudo apt install -y tigervnc-standalone-server tigervnc-common
+sudo apt install -y tigervnc-standalone-server tigervnc-common byobu iptables
 sudo systemctl daemon-reload
 sudo apt install -y snapd
 sudo systemctl enable snapd.apparmor
@@ -50,6 +50,56 @@ sudo apparmor_parser -r /etc/apparmor.d/*snap-confine*
 sudo apparmor_parser -r /var/lib/snapd/apparmor/profiles/snap-confine*
 
 sudo apt update -y && sudo apt full-upgrade -y && sudo apt autoremove -y && sudo apt clean -y && sudo apt autoclean -y
+
+# Get the current kernel version
+current_version=$(uname -r)
+
+# List all installed kernels
+all_versions=$(dpkg --list | grep linux-image | awk '{print $2}')
+
+# Loop through all installed kernels
+for version in $all_versions; do
+  # Remove all kernels except for the current version and the latest one
+  if [[ $version != $current_version && $version != $(dpkg --list | grep linux-image | sort -k 3 | tail -n 1 | awk '{print $2}') ]]; then
+    echo "Removing old kernel: $version"
+    apt-get remove -y $version
+  fi
+done
+
+# Remove unused packages
+apt-get autoremove -y
+
+# Cleanup apt cache
+apt-get clean
+
+# Clear any existing rules
+iptables -F
+
+# Set default policy to drop all incoming and outgoing traffic
+iptables -P INPUT DROP
+iptables -P OUTPUT DROP
+
+# Allow incoming HTTP, HTTPS, and VNC traffic
+iptables -A INPUT -p tcp --dport 80 -j ACCEPT
+iptables -A INPUT -p tcp --dport 443 -j ACCEPT
+iptables -A INPUT -p tcp --dport 6061 -j ACCEPT
+
+# Allow outgoing HTTP, HTTPS, and VNC traffic
+iptables -A OUTPUT -p tcp --sport 80 -j ACCEPT
+iptables -A OUTPUT -p tcp --sport 443 -j ACCEPT
+iptables -A OUTPUT -p tcp --sport 6061 -j ACCEPT
+
+# Allow loopback traffic (required for some applications)
+iptables -A INPUT -i lo -j ACCEPT
+iptables -A OUTPUT -o lo -j ACCEPT
+
+# Save the rules to apply them on reboot
+iptables-save > /etc/iptables.rules
+
+# Reload the rules to activate them immediately
+iptables-restore < /etc/iptables.rules
+
+
 
 # Set zsh as the default shell for new users
 echo "Set zsh as the default shell for new users"
