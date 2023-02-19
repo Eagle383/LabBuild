@@ -4,9 +4,11 @@
 echo "127.0.0.1	kali" >> /etc/hosts
 apt-mark hold grub-common grub-pc-bin grub-pc grub2-common grub-customizer
 
-apt update -y && sudo DEBIAN_FRONTEND=noninteractive apt full-upgrade -yq && sudo apt autoremove -y && sudo apt clean -y && sudo apt autoclean -y
+sudo apt update -yq && apt install -y htop
 
-sudo apt install -y htop kali-desktop-xfce
+sudo DEBIAN_FRONTEND=noninteractive apt full-upgrade -yq && sudo apt autoremove -y && sudo apt clean -y && sudo apt autoclean -y
+
+sudo apt install -y kali-desktop-xfce
 
 rm -r .cache .config .local
 
@@ -35,7 +37,8 @@ sudo mkhomedir_helper "LogixBomb"
 # Add user to root group
 sudo usermod -aG sudo LogixBomb
 
-sudo apt install -y x11vnc
+sudo apt install -y tigervnc-standalone-server tigervnc-common
+sudo systemctl daemon-reload
 sudo apt install -y snapd
 sudo systemctl enable snapd.apparmor
 sudo systemctl enable snapd
@@ -47,45 +50,6 @@ sudo apparmor_parser -r /etc/apparmor.d/*snap-confine*
 sudo apparmor_parser -r /var/lib/snapd/apparmor/profiles/snap-confine*
 
 sudo apt update -y && sudo apt full-upgrade -y && sudo apt autoremove -y && sudo apt clean -y && sudo apt autoclean -y
-
-mkdir /home/LogixBomb/Desktop
-chmod ugo+rwx /home/LogixBomb/Desktop
-
-# Get the list of desktop directories
-desktops=$(find /home -maxdepth 2 -type d -name "Desktop")
-# Create the update_resolution.sh file in each desktop directory
-for desktop in $desktops; do
-  touch "$desktop/update_resolution.sh"
-  echo '#!/bin/bash' >> "$desktop/update_resolution.sh"
-  echo '' >> "$desktop/update_resolution.sh"
-  echo '# Prompt the user for a screen resolution' >> "$desktop/update_resolution.sh"
-  echo 'echo "Please enter your desired screen resolution in the format WIDTHxHEIGHT (e.g. 1920x1080):"' >> "$desktop/update_resolution.sh"
-  echo 'read resolution' >> "$desktop/update_resolution.sh"
-  echo '' >> "$desktop/update_resolution.sh"
-  echo '# Find the PID for x11vnc' >> "$desktop/update_resolution.sh"
-  echo 'pid=$(pgrep x11vnc)' >> "$desktop/update_resolution.sh"
-  echo '' >> "$desktop/update_resolution.sh"
-  echo '# Check if x11vnc is running' >> "$desktop/update_resolution.sh"
-  echo 'if [ -z "$pid" ]; then' >> "$desktop/update_resolution.sh"
-  echo '  echo "x11vnc is not currently running."' >> "$desktop/update_resolution.sh"
-  echo 'else' >> "$desktop/update_resolution.sh"
-  echo '  # Kill x11vnc' >> "$desktop/update_resolution.sh"
-  echo '  kill "$pid"' >> "$desktop/update_resolution.sh"
-  echo '  echo "x11vnc (PID $pid) has been terminated."' >> "$desktop/update_resolution.sh"
-  echo 'fi' >> "$desktop/update_resolution.sh"
-  echo '' >> "$desktop/update_resolution.sh"
-  echo '# Restart the x11vnc server with the updated -geometry option' >> "$desktop/update_resolution.sh"
-  echo 'x11vnc -display :0 -rfbport 5900 -nopw -bg -xkb -quiet -forever -auth guess -geometry $resolution' >> "$desktop/update_resolution.sh"
-  chmod u+x "$desktop/update_resolution.sh"
-  mv $desktop/update_resolution.sh /usr/local/bin/update_resolution
-done
-
-
-# Add the x11vnc command to crontab
-(crontab -l 2>/dev/null; echo "@reboot x11vnc -display :0 -rfbport 5900 -nopw -bg -xkb -quiet -forever -auth guess") | crontab -
-
-# Add the novnc command to crontab
-(crontab -l 2>/dev/null; echo "@reboot novnc --listen 6061 --vnc localhost:5900 /snap/bin/novnc") | crontab -
 
 # Set zsh as the default shell for new users
 echo "Set zsh as the default shell for new users"
@@ -112,7 +76,47 @@ echo "Done"
 # Display the details of the self-signed SSL certificate
 #openssl x509 -in self.pem -text
 
-x11vnc -display :0 -rfbport 5900 -nopw -bg -xkb -quiet -forever -auth guess
-novnc --listen 6061 --vnc localhost:5900 /snap/bin/novnc
+# Step 1: Navigate to the systemd system directory
+cd /lib/systemd/system/
 
+# Step 2: Create a new service file called tigervncserver.service
+sudo tee tigervncserver.service > /dev/null <<EOF
+[Unit]
+Description=TigerVNC server
+
+[Service]
+Type=forking
+ExecStartPre=/bin/sh -c '/usr/bin/vncserver -kill %i > /dev/null 2>&1 || :'
+ExecStart=/sbin/runuser -l LogixBomb -c "/usr/bin/tigervncserver -SecurityTypes None -autokill no"
+ExecStop=/bin/sh -c '/usr/bin/tigervncserver -kill %i > /dev/null 2>&1 || :'
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+cd /root
+
+# Step 3: Reload the systemd daemon to pick up the new service file
+sudo systemctl daemon-reload
+
+# Step 4: Enable the service to start at boot
+sudo systemctl enable tigervncserver.service
+
+# Step 5: Start the service
+sudo systemctl start tigervncserver.service
+
+# Step 1: Navigate to the polkit directory
+cd /etc/polkit-1/localauthority/50-local.d/
+
+# Step 2: Create a new service file 
+sudo tee 45-allow-colord.pkla > /dev/null <<EOF
+[Allow Colord all Users]
+Identity=unix-user:*
+Action=org.freedesktop.color-manager.create-device;org.freedesktop.color-manager.create-profile;org.freedesktop.color-manager.delete-device;org.freedesktop.color-manager.delete-profile;org.freedesktop.color-manager.modify-device;org.freedesktop.color-manager.modify-profile
+ResultAny=no
+ResultInactive=no
+ResultActive=yes
+EOF
+
+sudo snap set novnc services.n6082.listen=6061 services.n6082.vnc=localhost:5901
 
